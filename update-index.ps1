@@ -1,20 +1,18 @@
-# 扫描 articles/ 目录，自动更新 index.html
-# 用法: .\update-index.ps1
+# Scan articles/ directory, regenerate index.html article list
+# Usage: .\update-index.ps1
 
 $siteRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $siteRoot
 
-# 读取现有 index.html，提取 header 和 footer 之间的内容
 $indexPath = Join-Path $siteRoot "index.html"
 $indexHtml = Get-Content $indexPath -Raw -Encoding UTF8
 
-# 收集所有文章信息
+# Collect article metadata
 $articles = @()
 $articleDir = Join-Path $siteRoot "articles"
 Get-ChildItem "$articleDir\*.html" | Where-Object { $_.Name -ne "_template.html" } | ForEach-Object {
     $html = Get-Content $_.FullName -Raw -Encoding UTF8
 
-    # 提取 meta 信息
     $title = ""
     $description = ""
     $date = ""
@@ -25,13 +23,11 @@ Get-ChildItem "$articleDir\*.html" | Where-Object { $_.Name -ne "_template.html"
     if ($html -match '<meta name="keywords" content="([^"]*)"') { $keywords = $Matches[1] }
     if ($html -match '<h1>([^<]*)</h1>') { $title = $Matches[1] }
 
-    # 从文件修改时间作为 fallback
     if (-not $date) { $date = $_.LastWriteTime.ToString("yyyy-MM-dd") }
 
-    # 中文日期
     $dateCn = ""
     if ($date -match "(\d{4})-(\d{2})-(\d{2})") {
-        $dateCn = "$($Matches[1])年$($Matches[2])月$($Matches[3])日"
+        $dateCn = "$($Matches[1])" + [char]0x5e74 + "$([int]$Matches[2])" + [char]0x6708 + "$([int]$Matches[3])" + [char]0x65e5
     }
 
     $articles += @{
@@ -44,10 +40,9 @@ Get-ChildItem "$articleDir\*.html" | Where-Object { $_.Name -ne "_template.html"
     }
 }
 
-# 按日期倒序排列
 $articles = $articles | Sort-Object { $_.Date } -Descending
 
-# 生成文章列表 HTML
+# Generate article cards
 $cardsHtml = ""
 foreach ($a in $articles) {
     $tagsHtml = ""
@@ -68,13 +63,13 @@ foreach ($a in $articles) {
 "@
 }
 
-# 用正则替换 index.html 中的文章列表区域
-$pattern = '(?s)(<div class="article-list" id="articles">.*?<h2>文章</h2>).*?(</div>\s*<footer>)'
+# Replace article list area
+$pattern = "(?s)(<div class=`"article-list`" id=`"articles`">.*?<h2>" + [char]0x6587 + [char]0x7ae0 + "</h2>).*?(</div>\s*<footer>)"
 $replacement = "`${1}$cardsHtml`n`${2}"
 
 $newIndexHtml = $indexHtml -replace $pattern, $replacement
-Set-Content -Path $indexPath -Value $newIndexHtml -Encoding UTF8 -NoNewline
-# 确保末尾有换行
+[System.IO.File]::WriteAllText($indexPath, $newIndexHtml, [System.Text.UTF8Encoding]::new($false))
+# Add trailing newline
 Add-Content -Path $indexPath -Value "`n" -Encoding UTF8 -NoNewline
 
 Write-Output "Index regenerated with $($articles.Count) articles."
